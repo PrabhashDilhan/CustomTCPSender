@@ -147,7 +147,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
             log.info("Selector loop started");
             while (true) {
                 try {
-                    int readyChannels = selector.select(1000); // 1 second timeout
+                    int readyChannels = selector.select();
 
                     if (readyChannels == 0) {
                         continue; // No channels ready
