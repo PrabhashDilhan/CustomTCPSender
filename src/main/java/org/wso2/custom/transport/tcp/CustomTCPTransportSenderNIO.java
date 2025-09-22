@@ -1,9 +1,13 @@
 package org.wso2.custom.transport.tcp;
 
 import org.apache.axis2.AxisFault;
+import org.apache.axis2.context.ConfigurationContext;
 import org.apache.axis2.context.MessageContext;
+import org.apache.axis2.description.TransportOutDescription;
 import org.apache.axis2.transport.OutTransportInfo;
 import org.apache.axis2.transport.base.AbstractTransportSender;
+import org.apache.axis2.transport.base.BaseConstants;
+import org.apache.axis2.transport.base.TransportMBeanSupport;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -33,8 +37,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                 return t;
             }
     );
-
-
     public CustomTCPTransportSenderNIO() throws IOException {
         this.selector = Selector.open();
         this.sessionManager = new SessionManager();
@@ -45,7 +47,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         startSelectorLoop();
         log.info("CustomTCPTransportSenderNIO initialized successfully");
     }
-
     @Override
     public void stop() {
         super.stop();
