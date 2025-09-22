@@ -31,7 +31,9 @@ public class SessionManager {
      */
     public void storeSession(String sessionId, SocketChannel socketChannel, MessageContext messageContext) {
         sessionMap.put(sessionId, new SessionData(socketChannel, sessionId, messageContext));
-        log.debug("Stored session: " + sessionId);
+        if (log.isDebugEnabled()) {
+            log.debug("Stored session: " + sessionId);
+        }
     }
     
     /**
@@ -54,7 +56,9 @@ public class SessionManager {
     public void removeSession(String sessionId) {
         SessionData removed = sessionMap.remove(sessionId);
         if (removed != null) {
-            log.debug("Removed session: " + sessionId);
+            if (log.isDebugEnabled()) {
+                log.debug("Removed session: " + sessionId);
+            }
         }
     }
     
@@ -78,7 +82,9 @@ public class SessionManager {
             sessionMap.entrySet().removeIf(entry -> {
                 boolean expired = currentTime - entry.getValue().getLastAccessedTime() > SESSION_TIMEOUT;
                 if (expired) {
-                    log.debug("Removing expired session: " + entry.getKey());
+                    if (log.isDebugEnabled()) {
+                        log.debug("Removing expired session: " + entry.getKey());
+                    }
                     removedCount[0]++;
                 }
                 return expired;

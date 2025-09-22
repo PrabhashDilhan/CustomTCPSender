@@ -49,18 +49,21 @@ public class ResponseProcessor {
     public void processResponse(SessionData sessionData, String response) throws AxisFault {
         responseProcessingExecutor.submit(() -> {
             try {
-                log.debug("Processing response for session: " + sessionData.getSessionId());
-
+                if (log.isDebugEnabled()) {
+                    log.debug("Processing response for session: " + sessionData.getSessionId());
+                }
                 // Create response message context from the original request context
                 MessageContext responseMsgCtx = transportSender.createResponseMessageContext(sessionData.getMessageContext());
-
                 // Process the SOAP response
                 SOAPEnvelope envelope = createSOAPEnvelope(response);
                 responseMsgCtx.setEnvelope(envelope);
-
-                log.debug("Sending response to AxisEngine.receive()");
+                if (log.isDebugEnabled()) {
+                    log.debug("Sending response to AxisEngine.receive()");
+                }
                 AxisEngine.receive(responseMsgCtx);
-                log.debug("Response sent successfully");
+                if (log.isDebugEnabled()) {
+                    log.debug("Response sent successfully");
+                }
             } catch (Exception e) {
                 log.error("Error processing response for session: " + sessionData.getSessionId(), e);
                 throw new RuntimeException("Error processing TCP response", e);

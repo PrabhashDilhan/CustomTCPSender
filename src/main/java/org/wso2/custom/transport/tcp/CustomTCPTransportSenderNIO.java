@@ -71,7 +71,9 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
             try {
                 if (sessionId == null || sessionId.trim().isEmpty()) {
                     // No session ID, handle the first authentication request
-                    log.debug("Handling authentication request for target: " + targetEPR);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Handling authentication request for target: " + targetEPR);
+                    }
                     handleAuthenticationRequest(msgContext, targetEPR);
                     // Authentication request is complete, return immediately
                     return;
@@ -82,7 +84,9 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                 }
 
                 // Get the session data
-                log.debug("Handling subsequent request for session: " + sessionId);
+                if (log.isDebugEnabled()) {
+                    log.debug("Handling subsequent request for session: " + sessionId);
+                }
                 SessionData sessionData = sessionManager.getSession(sessionId);
                 if (sessionData == null) {
                     handleException("Session not found: " + sessionId, null);
@@ -100,9 +104,13 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                 sessionData.setMessageContext(msgContext);
 
                 // Write the request to the backend (non-blocking)
-                log.debug("Writing request to backend for session: " + sessionId);
+                if (log.isDebugEnabled()) {
+                    log.debug("Writing request to backend for session: " + sessionId);
+                }
                 connectionManager.writeRequest(msgContext, sessionData.getSocketChannel());
-                log.debug("Request written, waiting for response...");
+                if (log.isDebugEnabled()) {
+                    log.debug("Request written, waiting for response...");
+                }
 
             } catch (IOException e) {
                 handleException("Error in TCP communication", e);
@@ -133,11 +141,15 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         key.attach(new AuthData(responseLatch, responseRef, sessionIdRef, msgContext));
 
         // Write the authentication request
-        log.debug("Writing authentication request...");
+        if (log.isDebugEnabled()) {
+            log.debug("Writing authentication request...");
+        }
         connectionManager.writeRequest(msgContext, socketChannel);
 
         selector.wakeup();
-        log.debug("Woke up selector, waiting for response...");
+        if (log.isDebugEnabled()) {
+            log.debug("Woke up selector, waiting for response...");
+        }
         // Schedule a timeout task to close the channel if no response is received
         connectionManager.scheduleTimeout(responseLatch, socketChannel, 50, "Authentication response");
     }
@@ -152,21 +164,28 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                     if (readyChannels == 0) {
                         continue; // No channels ready
                     }
-
-                    log.debug("Selector detected " + readyChannels + " ready channels");
+                    if (log.isDebugEnabled()) {
+                        log.debug("Selector detected " + readyChannels + " ready channels");
+                    }
 
                     for (SelectionKey key : selector.selectedKeys()) {
                         if (!key.isValid()) {
-                            log.debug("Invalid key, skipping");
+                            if (log.isDebugEnabled()) {
+                                log.debug("Invalid key, skipping");
+                            }
                             continue;
                         }
 
                         if (key.isConnectable()) {
-                            log.debug("Processing connect event");
+                            if (log.isDebugEnabled()) {
+                                log.debug("Processing connect event");
+                            }
                             handleConnect(key);
                         }
                         if (key.isReadable()) {
-                            log.debug("Processing read event");
+                            if (log.isDebugEnabled()) {
+                                log.debug("Processing read event");
+                            }
                             handleRead(key);
                         }
                     }
@@ -199,17 +218,23 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
             buffer.get(data);
             String response = new String(data);
 
-            log.debug("Received response: " + response);
-            log.debug("Attachment type: " + (attachment != null ? attachment.getClass().getSimpleName() : "null"));
+            if (log.isDebugEnabled()) {
+                log.debug("Received response: " + response);
+                log.debug("Attachment type: " + (attachment != null ? attachment.getClass().getSimpleName() : "null"));
+            }
 
             if (attachment instanceof AuthData) {
                 // Handle authentication response
-                log.debug("Processing authentication response");
+                if (log.isDebugEnabled()) {
+                    log.debug("Processing authentication response");
+                }
                 handleAuthResponse((AuthData) attachment, response, key);
             } else if (attachment instanceof String) {
                 // Handle regular session response
                 String sessionId = (String) attachment;
-                log.debug("Processing session response for: " + sessionId);
+                if (log.isDebugEnabled()) {
+                    log.debug("Processing session response for: " + sessionId);
+                }
                 handleSessionResponse(sessionId, response);
             }
         } else if (bytesRead == -1) {
@@ -224,9 +249,13 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
     }
 
     private void handleAuthResponse(AuthData authData, String response, SelectionKey key) throws AxisFault {
-        log.debug("handleAuthResponse called with response: " + response);
+        if (log.isDebugEnabled()) {
+            log.debug("handleAuthResponse called with response: " + response);
+        }
         String sessionId = extractSessionIdFromResponse(response);
-        log.debug("Extracted session ID: " + sessionId);
+        if (log.isDebugEnabled()) {
+            log.debug("Extracted session ID: " + sessionId);
+        }
         authData.getResponseLatch().countDown();
         authData.getSessionIdRef().set(sessionId);
         authData.getResponseRef().set(response);
@@ -242,10 +271,14 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
     }
 
     private void handleSessionResponse(String sessionId, String response) {
-        log.debug("handleSessionResponse called for session: " + sessionId);
+        if (log.isDebugEnabled()) {
+            log.debug("handleSessionResponse called for session: " + sessionId);
+        }
         SessionData sessionData = sessionManager.getSession(sessionId);
         if (sessionData != null) {
-            log.debug("Found session data, processing response");
+            if (log.isDebugEnabled()) {
+                log.debug("Found session data, processing response");
+            }
             String connectionMode = (String) sessionData.getMessageContext().getProperty("connectionMode");
             sessionManager.updateSessionAccess(sessionId);
             if(connectionMode != null && !connectionMode.trim().isEmpty() && connectionMode.equals("alternate")){
@@ -273,17 +306,23 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
 
 
     private String extractSessionIdFromResponse(String response) {
-        log.debug("extractSessionIdFromResponse called with: " + response);
+        if (log.isDebugEnabled()) {
+            log.debug("extractSessionIdFromResponse called with: " + response);
+        }
         // Example logic to extract session ID from the response
         // Adjust this based on the actual response format
         if (response.contains("<SessionId>")) {
             int start = response.indexOf("<SessionId>") + "<SessionId>".length();
             int end = response.indexOf("</SessionId>");
             String sessionId = response.substring(start, end);
-            log.debug("Found session ID: " + sessionId);
+            if (log.isDebugEnabled()) {
+                log.debug("Found session ID: " + sessionId);
+            }
             return sessionId;
         }
-        log.debug("No SessionId found in response");
+        if (log.isDebugEnabled()) {
+            log.debug("No SessionId found in response");
+        }
         return null;
     }
 

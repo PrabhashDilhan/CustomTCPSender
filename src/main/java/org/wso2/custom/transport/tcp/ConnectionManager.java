@@ -48,10 +48,10 @@ public class ConnectionManager {
                 socketChannel.close();
                 throw new AxisFault("Connection timeout");
             }
-            try { 
-                Thread.sleep(10); 
-            } catch (InterruptedException e) { 
-                Thread.currentThread().interrupt(); 
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 socketChannel.close();
                 throw new AxisFault("Connection interrupted", e);
             }
@@ -59,8 +59,9 @@ public class ConnectionManager {
 
         // Configure socket timeouts after connection is established
         configureSocketTimeouts(socketChannel);
-        
-        log.debug("Connection established to: " + targetEPR);
+        if (log.isDebugEnabled()){
+            log.debug("Connection established to: " + targetEPR);
+        }
         return socketChannel;
     }
     
@@ -70,11 +71,15 @@ public class ConnectionManager {
     public void writeRequest(MessageContext msgContext, SocketChannel socketChannel) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(1024);
         String request = formatRequest(msgContext);
-        log.debug("Writing request: " + request);
+        if (log.isDebugEnabled()) {
+            log.debug("Writing request: " + request);
+        }
         buffer.put(request.getBytes());
         buffer.flip();
         int bytesWritten = socketChannel.write(buffer);
-        log.debug("Wrote " + bytesWritten + " bytes to backend");
+        if (log.isDebugEnabled()) {
+            log.debug("Wrote " + bytesWritten + " bytes to backend");
+        }
     }
     
     /**
