@@ -10,6 +10,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -69,16 +70,28 @@ public class ConnectionManager {
      * Write request to the socket channel
      */
     public void writeRequest(MessageContext msgContext, SocketChannel socketChannel) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(1024);
         String request = formatRequest(msgContext);
-        if (log.isDebugEnabled()) {
-            log.debug("Writing request: " + request);
+        byte[] bytes = request.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);   // exact size, no overflow
+        int totalWritten = 0;
+
+        while (buffer.hasRemaining()) {
+            int n = socketChannel.write(buffer);      // non-blocking write
+            if (n < 0) {
+                throw new IOException("Channel closed while writing");
+            }
+            if (n == 0) {                             // would-block: avoid hot spin
+                try { Thread.sleep(1); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted while writing", ie);
+                }
+                continue;
+            }
+            totalWritten += n;
         }
-        buffer.put(request.getBytes());
-        buffer.flip();
-        int bytesWritten = socketChannel.write(buffer);
+
         if (log.isDebugEnabled()) {
-            log.debug("Wrote " + bytesWritten + " bytes to backend");
+            log.debug("Wrote " + totalWritten + " bytes to backend");
         }
     }
     

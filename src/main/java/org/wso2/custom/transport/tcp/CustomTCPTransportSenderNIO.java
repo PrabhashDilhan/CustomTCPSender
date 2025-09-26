@@ -139,7 +139,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         SelectionKey key = socketChannel.register(selector, SelectionKey.OP_READ);
 
         // Attach the authentication data to the key
-        key.attach(new AuthData(responseLatch, responseRef, sessionIdRef, msgContext));
+        key.attach(new ChannelState(new AuthData(responseLatch, responseRef, sessionIdRef, msgContext)));
 
         // Write the authentication request
         if (log.isDebugEnabled()) {
@@ -206,48 +206,69 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         }
     }
 
-    private void handleRead(SelectionKey key) throws IOException {
+    private void handleRead(SelectionKey key) throws IOException, AxisFault {
         SocketChannel channel = (SocketChannel) key.channel();
-        Object attachment = key.attachment();
-
-        ByteBuffer buffer = ByteBuffer.allocate(8192);
-        int bytesRead = channel.read(buffer);
-
-        if (bytesRead > 0) {
-            buffer.flip();
-            byte[] data = new byte[buffer.remaining()];
-            buffer.get(data);
-            String response = new String(data);
-
-            if (log.isDebugEnabled()) {
-                log.debug("Received response: " + response);
-                log.debug("Attachment type: " + (attachment != null ? attachment.getClass().getSimpleName() : "null"));
+        Object att = key.attachment();
+        if (!(att instanceof ChannelState)) {
+            // Back-compat: convert old attachments on the fly
+            if (att instanceof AuthData) {
+                key.attach(new ChannelState((AuthData) att));
+            } else if (att instanceof String) {
+                key.attach(new ChannelState((String) att));
+            } else {
+                key.attach(new ChannelState((AuthData) null));
             }
+        }
+        ChannelState st = (ChannelState) key.attachment();
 
-            if (attachment instanceof AuthData) {
-                // Handle authentication response
-                if (log.isDebugEnabled()) {
-                    log.debug("Processing authentication response");
-                }
-                handleAuthResponse((AuthData) attachment, response, key);
-            } else if (attachment instanceof String) {
-                // Handle regular session response
-                String sessionId = (String) attachment;
-                if (log.isDebugEnabled()) {
-                    log.debug("Processing session response for: " + sessionId);
-                }
-                handleSessionResponse(sessionId, response);
-            }
-        } else if (bytesRead == -1) {
-            // Connection closed
-            log.info("Connection closed");
-            if (attachment instanceof String) {
-                sessionManager.removeSession((String) attachment);
-            }
+        // Scratch buffer for this read
+        ByteBuffer scratch = ByteBuffer.allocate(8192);
+        int bytesRead = channel.read(scratch);
+        if (bytesRead == -1) {
+            log.info("Connection closed by peer");
+            if (st.sessionId != null) sessionManager.removeSession(st.sessionId);
             key.cancel();
             channel.close();
+            return;
+        }
+        if (bytesRead == 0) return;
+
+        scratch.flip();
+        while (scratch.hasRemaining()) {
+            byte b = scratch.get();
+
+            if (b == '\n') {
+                // complete one frame
+                st.frameBuf.flip();
+                byte[] arr = new byte[st.frameBuf.remaining()];
+                st.frameBuf.get(arr);
+                st.frameBuf.clear();
+
+                String response = new String(arr, java.nio.charset.StandardCharsets.UTF_8);
+                // trim trailing CR if CRLF
+                if (!response.isEmpty() && response.charAt(response.length() - 1) == '\r') {
+                    response = response.substring(0, response.length() - 1);
+                }
+
+                if (log.isDebugEnabled()) {
+                    log.debug("Framed response: " + response);
+                }
+
+                // Route to auth/session handlers
+                if (st.auth != null) {
+                    handleAuthResponse(st.auth, response, key);
+                } else if (st.sessionId != null) {
+                    handleSessionResponse(st.sessionId, response);
+                } else {
+                    log.warn("Framed message but no auth or session set");
+                }
+            } else {
+                st.frameBuf = ensureCapacity(st.frameBuf, 1, st.maxFrameBytes);
+                st.frameBuf.put(b);
+            }
         }
     }
+
 
     private void handleAuthResponse(AuthData authData, String response, SelectionKey key) throws AxisFault {
         if (log.isDebugEnabled()) {
@@ -265,7 +286,9 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         sessionManager.storeSession(sessionId, (SocketChannel) key.channel(), authData.getMessageContext());
 
         // Update the key attachment to use session ID for future requests
-        key.attach(sessionId);
+        ChannelState st = (ChannelState) key.attachment();
+        st.sessionId = sessionId;
+        st.auth = null;
 
         responseProcessor.processResponse(sessionManager.getSession(sessionId), response);
 
@@ -327,5 +350,33 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         return null;
     }
 
+    private static ByteBuffer ensureCapacity(ByteBuffer buf, int more, int max) {
+        if (buf.remaining() >= more) return buf;
+        int needed = buf.position() + more;
+        if (needed > max) {
+            throw new IllegalStateException("Frame exceeds max size " + max + " bytes");
+        }
+        int newCap = Math.max(buf.capacity() * 2, needed);
+        if (newCap > max) newCap = max;
+        ByteBuffer nb = ByteBuffer.allocate(newCap);
+        buf.flip();
+        nb.put(buf);
+        return nb;
+    }
+
+    static final class ChannelState {
+        String sessionId;
+        AuthData auth;
+        ByteBuffer frameBuf;
+        int maxFrameBytes = 4 * 1024 * 1024;
+        ChannelState(AuthData auth) {
+            this.auth = auth;
+            this.frameBuf = ByteBuffer.allocate(8 * 1024);
+        }
+        ChannelState(String sessionId) {
+            this.sessionId = sessionId;
+            this.frameBuf = ByteBuffer.allocate(8 * 1024);
+        }
+    }
 
 }
