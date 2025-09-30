@@ -2,6 +2,7 @@ package org.wso2.custom.transport.tcp;
 
 import org.apache.axis2.AxisFault;
 import org.apache.axis2.context.MessageContext;
+import org.apache.axis2.transport.tcp.TCPConstants;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -69,8 +70,8 @@ public class ConnectionManager {
     /**
      * Write request to the socket channel
      */
-    public void writeRequest(MessageContext msgContext, SocketChannel socketChannel) throws IOException {
-        String request = formatRequest(msgContext);
+    public void writeRequest(MessageContext msgContext, SocketChannel socketChannel, String delimiter, String delimiterType) throws IOException {
+        String request = formatRequest(msgContext, delimiter, delimiterType);
         byte[] bytes = request.getBytes(StandardCharsets.UTF_8);
         ByteBuffer buffer = ByteBuffer.wrap(bytes);   // exact size, no overflow
         int totalWritten = 0;
@@ -124,9 +125,24 @@ public class ConnectionManager {
     /**
      * Format request from MessageContext
      */
-    private String formatRequest(MessageContext msgContext) {
-        // Format the request from the MessageContext
-        return msgContext.getEnvelope().toString();
+    private String formatRequest(MessageContext msgContext, String delimiter, String delimiterType) {
+        String msg  = msgContext.getEnvelope().getBody().getFirstElement().toString(); // Append newline as message delimiter
+        if (delimiter != null && !delimiter.isEmpty()) {
+            if (TCPConstants.BYTE_DELIMITER_TYPE.equalsIgnoreCase(delimiterType)) {
+                try {
+                    int value = Integer.parseInt(delimiter.replace("0x", ""), 16);
+                    msg += (char) value;
+                } catch (NumberFormatException e) {
+                    // Fallback: just append raw delimiter if parsing fails
+                    msg += delimiter;
+                }
+            } else {
+                // Normal string delimiter
+                msg += delimiter;
+            }
+        }
+
+        return msg;
     }
     
     /**

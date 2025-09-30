@@ -12,10 +12,14 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -68,6 +72,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
     public void sendMessage(MessageContext msgContext, String targetEPR, OutTransportInfo outTransportInfo) throws AxisFault {
 
         if (targetEPR != null) {
+            Map<String,String> params = getURLParameters(targetEPR);
             String sessionId = (String) msgContext.getProperty("SESSION_ID");
             try {
                 if (sessionId == null || sessionId.trim().isEmpty()) {
@@ -75,7 +80,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                     if (log.isDebugEnabled()) {
                         log.debug("Handling authentication request for target: " + targetEPR);
                     }
-                    handleAuthenticationRequest(msgContext, targetEPR);
+                    handleAuthenticationRequest(msgContext, targetEPR, params);
                     // Authentication request is complete, return immediately
                     return;
                 } else if (!sessionManager.hasSession(sessionId)) {
@@ -108,7 +113,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                 if (log.isDebugEnabled()) {
                     log.debug("Writing request to backend for session: " + sessionId);
                 }
-                connectionManager.writeRequest(msgContext, sessionData.getSocketChannel());
+                connectionManager.writeRequest(msgContext, sessionData.getSocketChannel(), params.get("delimiter"), params.get("delimiterType"));
                 if (log.isDebugEnabled()) {
                     log.debug("Request written, waiting for response...");
                 }
@@ -127,7 +132,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
     }
 
 
-    private void handleAuthenticationRequest(MessageContext msgContext, String targetEPR) throws IOException, AxisFault {
+    private void handleAuthenticationRequest(MessageContext msgContext, String targetEPR,Map<String,String> params) throws IOException, AxisFault {
         // Create a new NIO connection using ConnectionManager
         SocketChannel socketChannel = connectionManager.createConnection(targetEPR);
 
@@ -145,7 +150,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         if (log.isDebugEnabled()) {
             log.debug("Writing authentication request...");
         }
-        connectionManager.writeRequest(msgContext, socketChannel);
+        connectionManager.writeRequest(msgContext, socketChannel,params.get("delimiter"), params.get("delimiterType"));
 
         selector.wakeup();
         if (log.isDebugEnabled()) {
@@ -362,6 +367,25 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         buf.flip();
         nb.put(buf);
         return nb;
+    }
+
+    private Map<String,String> getURLParameters(String url) throws AxisFault {
+        try {
+            Map<String,String> params = new HashMap<String,String>();
+            URI tcpUrl = new URI(url);
+            String query = tcpUrl.getQuery();
+            if (query != null) {
+                String[] paramStrings = query.split("&");
+                for (String p : paramStrings) {
+                    int index = p.indexOf('=');
+                    params.put(p.substring(0, index), p.substring(index+1));
+                }
+            }
+            return params;
+        } catch (URISyntaxException e) {
+            handleException("Malformed tcp url", e);
+        }
+        return null;
     }
 
     static final class ChannelState {
