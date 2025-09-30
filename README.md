@@ -12,3 +12,10 @@ class="org.wso2.custom.transport.tcp.CustomTCPTransportSenderNIO"
 protocol = "tcp"
 
 ```
+## Need to define the backend endpoint as below and you can define the delimiter as well <br />
+
+```xml
+<endpoint>
+    <address uri="tcp://localhost:8081?delimiter=0x0A&amp;delimiterType=byte"/>
+</endpoint>
+```
