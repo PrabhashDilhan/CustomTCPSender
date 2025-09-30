@@ -8,7 +8,6 @@ import java.nio.channels.SocketChannel;
  * Represents session data for TCP transport including socket channel, session ID, and message context.
  */
 public class SessionData {
-    
     private final SocketChannel socketChannel;
     private final String sessionId;
     private volatile long lastAccessedTime;
@@ -20,7 +19,6 @@ public class SessionData {
         this.lastAccessedTime = System.currentTimeMillis();
         this.messageContext = messageContext;
     }
-
     public SocketChannel getSocketChannel() {
         return socketChannel;
     }
@@ -32,7 +30,6 @@ public class SessionData {
     public long getLastAccessedTime() {
         return lastAccessedTime;
     }
-
     public void updateLastAccessedTime() {
         this.lastAccessedTime = System.currentTimeMillis();
     }

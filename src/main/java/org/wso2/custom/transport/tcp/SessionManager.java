@@ -17,15 +17,12 @@ import java.util.concurrent.TimeUnit;
 public class SessionManager {
     
     private static final Log log = LogFactory.getLog(SessionManager.class);
-    private static final long SESSION_TIMEOUT = 300_000; // 5 minutes
-    
     private final Map<String, SessionData> sessionMap = new ConcurrentHashMap<>();
     private final ScheduledExecutorService sessionCleaner = Executors.newScheduledThreadPool(1);
     
     public SessionManager() {
         startSessionCleaner();
     }
-    
     /**
      * Store a new session
      */
@@ -35,21 +32,18 @@ public class SessionManager {
             log.debug("Stored session: " + sessionId);
         }
     }
-    
     /**
      * Get session data by session ID
      */
     public SessionData getSession(String sessionId) {
         return sessionMap.get(sessionId);
     }
-    
     /**
      * Check if session exists
      */
     public boolean hasSession(String sessionId) {
         return sessionMap.containsKey(sessionId);
     }
-    
     /**
      * Remove session
      */
@@ -61,7 +55,6 @@ public class SessionManager {
             }
         }
     }
-    
     /**
      * Update session's last accessed time
      */
@@ -71,7 +64,6 @@ public class SessionManager {
             sessionData.updateLastAccessedTime();
         }
     }
-    
     /**
      * Start the session cleaner that removes expired sessions
      */
@@ -80,7 +72,7 @@ public class SessionManager {
             long currentTime = System.currentTimeMillis();
             final int[] removedCount = {0};
             sessionMap.entrySet().removeIf(entry -> {
-                boolean expired = currentTime - entry.getValue().getLastAccessedTime() > SESSION_TIMEOUT;
+                boolean expired = currentTime - entry.getValue().getLastAccessedTime() > TCPConstants.SESSION_TIMEOUT;
                 if (expired) {
                     if (log.isDebugEnabled()) {
                         log.debug("Removing expired session: " + entry.getKey());
@@ -92,9 +84,8 @@ public class SessionManager {
             if (removedCount[0] > 0) {
                 log.info("Cleaned up " + removedCount[0] + " expired sessions");
             }
-        }, 0, 1, TimeUnit.MINUTES); // Run every 1 minute
+        }, 0, TCPConstants.SESSION_CLEANER_INTERVAL, TimeUnit.SECONDS);
     }
-    
     /**
      * Shutdown the session manager
      */
@@ -103,7 +94,6 @@ public class SessionManager {
         sessionCleaner.shutdown();
         sessionMap.clear();
     }
-    
     /**
      * Get current session count
      */

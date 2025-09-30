@@ -73,7 +73,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
 
         if (targetEPR != null) {
             Map<String,String> params = getURLParameters(targetEPR);
-            String sessionId = (String) msgContext.getProperty("SESSION_ID");
+            String sessionId = (String) msgContext.getProperty(TCPConstants.SESSION_ID);
             try {
                 if (sessionId == null || sessionId.trim().isEmpty()) {
                     // No session ID, handle the first authentication request
@@ -88,7 +88,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                     handleException("Invalid session ID: " + sessionId, null);
                     return;
                 }
-
                 // Get the session data
                 if (log.isDebugEnabled()) {
                     log.debug("Handling subsequent request for session: " + sessionId);
@@ -104,7 +103,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                     handleException("Session connection is closed: " + sessionId, null);
                     return;
                 }
-
                 // Update last accessed time and store current message context
                 sessionManager.updateSessionAccess(sessionId);
                 sessionData.setMessageContext(msgContext);
@@ -135,7 +133,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
     private void handleAuthenticationRequest(MessageContext msgContext, String targetEPR,Map<String,String> params) throws IOException, AxisFault {
         // Create a new NIO connection using ConnectionManager
         SocketChannel socketChannel = connectionManager.createConnection(targetEPR);
-
         // Create a latch to block until response is received
         CountDownLatch responseLatch = new CountDownLatch(1);
         AtomicReference<String> responseRef = new AtomicReference<>();
@@ -157,7 +154,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
             log.debug("Woke up selector, waiting for response...");
         }
         // Schedule a timeout task to close the channel if no response is received
-        connectionManager.scheduleTimeout(responseLatch, socketChannel, 50, "Authentication response");
+        connectionManager.scheduleTimeout(responseLatch, socketChannel, "Authentication response");
     }
 
     private void startSelectorLoop() {

@@ -22,10 +22,7 @@ import java.util.concurrent.TimeUnit;
 public class ConnectionManager {
     
     private static final Log log = LogFactory.getLog(ConnectionManager.class);
-    
-    private static final int CONNECT_TIMEOUT = 10000;
-    private static final int SOCKET_TIMEOUT = 30000; // Socket SO_TIMEOUT in milliseconds
-    
+
     private final ScheduledExecutorService timeoutExecutor;
     
     public ConnectionManager(ScheduledExecutorService timeoutExecutor) {
@@ -46,7 +43,7 @@ public class ConnectionManager {
         // Wait for connection to complete first
         long startTime = System.currentTimeMillis();
         while (!socketChannel.finishConnect()) {
-            if (System.currentTimeMillis() - startTime > CONNECT_TIMEOUT) {
+            if (System.currentTimeMillis() - startTime > org.wso2.custom.transport.tcp.TCPConstants.CONNECT_TIMEOUT) {
                 socketChannel.close();
                 throw new AxisFault("Connection timeout");
             }
@@ -100,10 +97,9 @@ public class ConnectionManager {
      * Configure socket timeouts and options
      */
     private void configureSocketTimeouts(SocketChannel socketChannel) throws IOException {
-        // Configure socket timeouts for better connection management
-        socketChannel.socket().setSoTimeout(SOCKET_TIMEOUT);
+        socketChannel.socket().setSoTimeout(org.wso2.custom.transport.tcp.TCPConstants.SOCKET_TIMEOUT);
         socketChannel.socket().setKeepAlive(true);
-        socketChannel.socket().setTcpNoDelay(true); // Disable Nagle's algorithm for better performance
+        socketChannel.socket().setTcpNoDelay(true);
     }
     
     /**
@@ -126,32 +122,27 @@ public class ConnectionManager {
      * Format request from MessageContext
      */
     private String formatRequest(MessageContext msgContext, String delimiter, String delimiterType) {
-        String msg  = msgContext.getEnvelope().getBody().getFirstElement().toString(); // Append newline as message delimiter
+        String msg  = msgContext.getEnvelope().getBody().getFirstElement().toString();
         if (delimiter != null && !delimiter.isEmpty()) {
             if (TCPConstants.BYTE_DELIMITER_TYPE.equalsIgnoreCase(delimiterType)) {
                 try {
                     int value = Integer.parseInt(delimiter.replace("0x", ""), 16);
                     msg += (char) value;
                 } catch (NumberFormatException e) {
-                    // Fallback: just append raw delimiter if parsing fails
                     msg += delimiter;
                 }
             } else {
-                // Normal string delimiter
                 msg += delimiter;
             }
         }
-
         return msg;
     }
-    
     /**
      * Schedule a timeout task for connection
      */
-    public void scheduleTimeout(CountDownLatch responseLatch, SocketChannel socketChannel, 
-                               long timeoutSeconds, String operation) {
+    public void scheduleTimeout(CountDownLatch responseLatch, SocketChannel socketChannel, String operation) {
         timeoutExecutor.schedule(() -> {
-            if (responseLatch.getCount() > 0) { // Response not received
+            if (responseLatch.getCount() > 0) {
                 try {
                     log.warn(operation + " timeout, closing channel...");
                     socketChannel.close();
@@ -159,6 +150,6 @@ public class ConnectionManager {
                     log.error("Error closing channel after timeout", e);
                 }
             }
-        }, timeoutSeconds, TimeUnit.SECONDS);
+        }, org.wso2.custom.transport.tcp.TCPConstants.AUTH_REQUEST_TIMEOUT, TimeUnit.SECONDS);
     }
 }

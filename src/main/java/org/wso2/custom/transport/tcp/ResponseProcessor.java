@@ -19,9 +19,7 @@ import java.util.concurrent.ThreadFactory;
  * Handles response processing for TCP transport including SOAP envelope creation and AxisEngine integration.
  */
 public class ResponseProcessor {
-    
     private static final Log log = LogFactory.getLog(ResponseProcessor.class);
-    
     private final ExecutorService responseProcessingExecutor;
     private final CustomTCPTransportSenderNIO transportSender;
     
@@ -38,11 +36,9 @@ public class ResponseProcessor {
                 return thread;
             }
         };
-
-        this.responseProcessingExecutor = Executors.newFixedThreadPool(500, namedThreadFactory);
+        this.responseProcessingExecutor = Executors.newFixedThreadPool(TCPConstants.RESPONSE_PROCESSING_THREAD_COUNT, namedThreadFactory);
         log.info("ResponseProcessor initialized with 500 threads");
     }
-    
     /**
      * Process response asynchronously
      */
@@ -52,9 +48,7 @@ public class ResponseProcessor {
                 if (log.isDebugEnabled()) {
                     log.debug("Processing response for session: " + sessionData.getSessionId());
                 }
-                // Create response message context from the original request context
                 MessageContext responseMsgCtx = transportSender.createResponseMessageContext(sessionData.getMessageContext());
-                // Process the SOAP response
                 SOAPEnvelope envelope = createSOAPEnvelope(response);
                 responseMsgCtx.setEnvelope(envelope);
                 if (log.isDebugEnabled()) {
@@ -70,27 +64,16 @@ public class ResponseProcessor {
             }
         });
     }
-    
     /**
      * Create SOAP envelope from response string
      */
     public SOAPEnvelope createSOAPEnvelope(String response) throws Exception {
-        // Convert the response string to an OMElement
         OMElement finalResponse = AXIOMUtil.stringToOM(response);
-
-        // Create a SOAPFactory (e.g., for SOAP 1.1)
         SOAPFactory soapFactory = new SOAP11Factory();
-
-        // Create a new SOAPEnvelope
         SOAPEnvelope envelope = soapFactory.getDefaultEnvelope();
-
-        // Add the OMElement to the SOAP body
         envelope.getBody().addChild(finalResponse);
-
         return envelope;
     }
-    
-    
     /**
      * Shutdown the response processor
      */
