@@ -305,7 +305,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
             if (log.isDebugEnabled()) {
                 log.debug("Found session data, processing response");
             }
-            String connectionMode = (String) sessionData.getMessageContext().getProperty("connectionMode");
+            String connectionMode = (String) sessionData.getMessageContext().getProperty(TCPConstants.CONNECTION_MODE);
             sessionManager.updateSessionAccess(sessionId);
             if(connectionMode != null && !connectionMode.trim().isEmpty() && connectionMode.equals("alternate")){
                 sessionManager.removeSession(sessionId);

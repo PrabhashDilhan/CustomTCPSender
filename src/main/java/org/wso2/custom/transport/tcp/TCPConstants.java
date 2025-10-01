@@ -8,5 +8,6 @@ public final class TCPConstants {
     public static final long SESSION_TIMEOUT = 120_000; // Session timeout in milliseconds
     public static final int SESSION_CLEANER_INTERVAL = 15; // Session cleaner interval in seconds
     public static final String SESSION_ID = "SESSION_ID";
+    public static final String CONNECTION_MODE = "connectionMode";
 
 }
