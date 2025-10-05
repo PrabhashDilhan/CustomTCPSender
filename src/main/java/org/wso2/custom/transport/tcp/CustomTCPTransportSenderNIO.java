@@ -1,13 +1,9 @@
 package org.wso2.custom.transport.tcp;
 
 import org.apache.axis2.AxisFault;
-import org.apache.axis2.context.ConfigurationContext;
 import org.apache.axis2.context.MessageContext;
-import org.apache.axis2.description.TransportOutDescription;
 import org.apache.axis2.transport.OutTransportInfo;
 import org.apache.axis2.transport.base.AbstractTransportSender;
-import org.apache.axis2.transport.base.BaseConstants;
-import org.apache.axis2.transport.base.TransportMBeanSupport;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -20,6 +16,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -92,28 +89,47 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                 if (log.isDebugEnabled()) {
                     log.debug("Handling subsequent request for session: " + sessionId);
                 }
-                SessionData sessionData = sessionManager.getSession(sessionId);
-                if (sessionData == null) {
-                    handleException("Session not found: " + sessionId, null);
-                    return;
-                }
 
-                // Check if connection is still open
-                if (!sessionData.getSocketChannel().isOpen()) {
-                    handleException("Session connection is closed: " + sessionId, null);
-                    return;
-                }
-                // Update last accessed time and store current message context
-                sessionManager.updateSessionAccess(sessionId);
-                sessionData.setMessageContext(msgContext);
+                String connectionMode = (String) msgContext.getProperty(TCPConstants.CONNECTION_MODE);
+                boolean isAlternate = connectionMode != null && !connectionMode.trim().isEmpty() && connectionMode.equals("alternate");
 
-                // Write the request to the backend (non-blocking)
-                if (log.isDebugEnabled()) {
-                    log.debug("Writing request to backend for session: " + sessionId);
-                }
-                connectionManager.writeRequest(msgContext, sessionData.getSocketChannel(), params.get("delimiter"), params.get("delimiterType"));
-                if (log.isDebugEnabled()) {
-                    log.debug("Request written, waiting for response...");
+                if (isAlternate) {
+                    // Open a new transient connection for this request
+                    if (log.isDebugEnabled()) {
+                        log.debug("Opening alternate transient connection for session: " + sessionId);
+                    }
+                    SocketChannel altChannel = connectionManager.createConnection(targetEPR);
+                    SelectionKey key = altChannel.register(selector, SelectionKey.OP_READ);
+                    String alternateSessionID = UUID.randomUUID().toString();
+                    sessionManager.storeSession(alternateSessionID, (SocketChannel) key.channel(), msgContext, key);
+                    key.attach(new ChannelState(alternateSessionID));
+                    if (log.isDebugEnabled()) {
+                        log.debug("Writing request to backend over alternate channel for session: " + sessionId);
+                    }
+                    connectionManager.writeRequest(msgContext, altChannel, params.get("delimiter"), params.get("delimiterType"));
+                    selector.wakeup();
+                } else {
+                    SessionData sessionData = sessionManager.getSession(sessionId);
+                    if (sessionData == null) {
+                        handleException("Session not found: " + sessionId, null);
+                        return;
+                    }
+                    // Check if connection is still open
+                    if (!sessionData.getSocketChannel().isOpen()) {
+                        handleException("Session connection is closed: " + sessionId, null);
+                        return;
+                    }
+                    // Update last accessed time and store current message context
+                    sessionManager.updateSessionAccess(sessionId);
+                    sessionData.setMessageContext(msgContext);
+                    // Write the request to the backend over the permanent channel (non-blocking)
+                    if (log.isDebugEnabled()) {
+                        log.debug("Writing request to backend for session: " + sessionId);
+                    }
+                    connectionManager.writeRequest(msgContext, sessionData.getSocketChannel(), params.get("delimiter"), params.get("delimiterType"));
+                    if (log.isDebugEnabled()) {
+                        log.debug("Request written, waiting for response...");
+                    }
                 }
 
             } catch (IOException e) {
@@ -285,7 +301,7 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         authData.getResponseRef().set(response);
 
         // Store the session data (reuse the same connection)
-        sessionManager.storeSession(sessionId, (SocketChannel) key.channel(), authData.getMessageContext());
+        sessionManager.storeSession(sessionId, (SocketChannel) key.channel(), authData.getMessageContext(),key);
 
         // Update the key attachment to use session ID for future requests
         ChannelState st = (ChannelState) key.attachment();
@@ -295,7 +311,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         responseProcessor.processResponse(sessionManager.getSession(sessionId), response);
 
     }
-
     private void handleSessionResponse(String sessionId, String response) {
         if (log.isDebugEnabled()) {
             log.debug("handleSessionResponse called for session: " + sessionId);
@@ -306,7 +321,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                 log.debug("Found session data, processing response");
             }
             String connectionMode = (String) sessionData.getMessageContext().getProperty(TCPConstants.CONNECTION_MODE);
-            sessionManager.updateSessionAccess(sessionId);
             if(connectionMode != null && !connectionMode.trim().isEmpty() && connectionMode.equals("alternate")){
                 sessionManager.removeSession(sessionId);
                 try {
@@ -319,6 +333,11 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
                 } catch (IOException e) {
                     log.error("Error closing alternate connection", e);
                 }
+            }else{
+                if (log.isDebugEnabled()) {
+                    log.debug("Keeping permanent connection open for session: " + sessionId);
+                }
+                sessionManager.updateSessionAccess(sessionId);
             }
             try {
                 responseProcessor.processResponse(sessionData, response);
@@ -384,7 +403,6 @@ public class CustomTCPTransportSenderNIO extends AbstractTransportSender {
         }
         return null;
     }
-
     static final class ChannelState {
         String sessionId;
         AuthData auth;

@@ -4,6 +4,8 @@ import org.apache.axis2.context.MessageContext;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import java.io.IOException;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,8 +28,8 @@ public class SessionManager {
     /**
      * Store a new session
      */
-    public void storeSession(String sessionId, SocketChannel socketChannel, MessageContext messageContext) {
-        sessionMap.put(sessionId, new SessionData(socketChannel, sessionId, messageContext));
+    public void storeSession(String sessionId, SocketChannel socketChannel, MessageContext messageContext, SelectionKey key) {
+        sessionMap.put(sessionId, new SessionData(socketChannel, sessionId, messageContext,key));
         if (log.isDebugEnabled()) {
             log.debug("Stored session: " + sessionId);
         }
@@ -76,6 +78,16 @@ public class SessionManager {
                 if (expired) {
                     if (log.isDebugEnabled()) {
                         log.debug("Removing expired session: " + entry.getKey());
+                    }
+                    try {
+                        SelectionKey key = entry.getValue().getKey();
+                        if (key != null) {
+                            key.cancel();
+                        }
+                        SocketChannel ch = entry.getValue().getSocketChannel();
+                        ch.close();
+                    } catch (IOException e) {
+                        log.error("Error closing expired session channel", e);
                     }
                     removedCount[0]++;
                 }

@@ -2,6 +2,7 @@ package org.wso2.custom.transport.tcp;
 
 import org.apache.axis2.context.MessageContext;
 
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 
 /**
@@ -12,12 +13,14 @@ public class SessionData {
     private final String sessionId;
     private volatile long lastAccessedTime;
     private MessageContext messageContext;
+    private SelectionKey key;
 
-    public SessionData(SocketChannel socketChannel, String sessionId, MessageContext messageContext) {
+    public SessionData(SocketChannel socketChannel, String sessionId, MessageContext messageContext, SelectionKey key) {
         this.socketChannel = socketChannel;
         this.sessionId = sessionId;
         this.lastAccessedTime = System.currentTimeMillis();
         this.messageContext = messageContext;
+        this.key = key;
     }
     public SocketChannel getSocketChannel() {
         return socketChannel;
@@ -33,12 +36,17 @@ public class SessionData {
     public void updateLastAccessedTime() {
         this.lastAccessedTime = System.currentTimeMillis();
     }
-
     public MessageContext getMessageContext() { 
         return messageContext; 
     }
 
     public void setMessageContext(MessageContext messageContext) {
         this.messageContext = messageContext;
+    }
+    public SelectionKey getKey() {
+        return key;
+    }
+    public void setKey(SelectionKey key) {
+        this.key = key;
     }
 }
